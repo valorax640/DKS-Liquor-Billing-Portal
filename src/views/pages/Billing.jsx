@@ -17,6 +17,8 @@ import {
 import MainCard from 'components/cards/MainCard';
 import DeleteIcon from '@mui/icons-material/Delete';
 import useMemberListStore from 'store/useMemberListStore';
+import useGstStore from 'store/useGstStore';
+import useItemListStore from 'store/useItemListStore'
 
 const members = [
   { member_code: 'MEM001', member_name: 'Amit', state: 'West Bengal' },
@@ -26,14 +28,16 @@ const members = [
 ];
 
 const items = [
-  { name: 'Wishky', rate: 500, barcode: '8901450007286' },
-  { name: 'Rum', rate: 300, barcode: '8906021061650' },
-  { name: 'Wishky', rate: 400, barcode: '8908005822691' },
-  { name: 'Wishky', rate: 500, barcode: 'W2070594' },
-  { name: 'Gin', rate: 400, barcode: '89000728' }
+  { name: 'Wishky', rate: '500', barcode: '8902519500694' },
+  { name: 'Rum', rate: '300', barcode: '89000724' },
+  { name: 'Wishky', rate: '400', barcode: '8908005822691' },
+  { name: 'Wishky', rate: '500', barcode: 'W2070594' },
+  { name: 'Gin', rate: '400', barcode: '89000728' }
 ];
 
 const today = new Date().toISOString().split('T')[0];
+const [year, month, day] = today.split('-');
+const formattedDate = `${day}-${month}-${year}`;
 const isNumeric = (val) => /^(\d+)?(\.\d{0,2})?$/.test(val);
 
 export default function Billing() {
@@ -49,14 +53,23 @@ export default function Billing() {
   const [billingList, setBillingList] = useState([]);
 
   const [taxableAmount, setTaxableAmount] = useState('');
+
+  const [cgstOptions, setCgstOptions] = useState([]);
+  const [sgstOptions, setSgstOptions] = useState([]);
+
+  const [selectedCGST, setSelectedCGST] = useState(null);
+  const [selectedSGST, setSelectedSGST] = useState(null);
+
   const [cgst, setCgst] = useState('');
   const [sgst, setSgst] = useState('');
-  const [igst, setIgst] = useState('');
+
   const [gstAmount, setGstAmount] = useState('');
   const [finalTotal, setFinalTotal] = useState('');
 
   const [lastEdited, setLastEdited] = useState(null); // 'cgst' or 'sgst'
-  const { data, fetchUser, status } = useMemberListStore();
+  const { data, fetchData, status } = useMemberListStore();
+  const { gstdata, fetchGstData, gststatus } = useGstStore();
+  const { itemdata, fetchItemData, itemstatus } = useItemListStore();
 
   const [scannedValue, setScannedValue] = useState('');
   const [toggle, setToggle] = useState(false);
@@ -67,7 +80,7 @@ export default function Billing() {
   // Item → Rate Autofill
   useEffect(() => {
     if (selectedItem) {
-      setRate(selectedItem.rate);
+      setRate(selectedItem?.item_rate);
       if (quantity) {
         setQuantity(quantity + 1);
       } else {
@@ -106,22 +119,25 @@ export default function Billing() {
   useEffect(() => {
     const gst =
       taxableAmount *
-      ((Number(cgst || 0) + Number(sgst || 0) + Number(igst || 0)) / 100);
+      ((Number(cgst || 0) + Number(sgst || 0)) / 100);
     setGstAmount(gst.toFixed(2));
     const final = Number(taxableAmount || 0) + gst;
     setFinalTotal(final.toFixed(2));
-  }, [cgst, sgst, igst, taxableAmount]);
+  }, [cgst, sgst, taxableAmount]);
 
   const handleAddItem = () => {
+    console.log('clicked');
+
     if (selectedItem && quantity && isNumeric(quantity)) {
-      const rateVal = selectedItem.rate;
+      console.log('entered');
+      const rateVal = selectedItem.item_rate;
       const amt = rateVal * quantity;
       const disc = discount ? parseFloat(discount) : 0;
       const total = amt - disc;
 
       setBillingList(prev => {
         const index = prev.findIndex(
-          item => item.name === selectedItem.name && item.rate === rateVal
+          item => item.name === selectedItem.item_name && item.rate === rateVal
         );
 
         if (index !== -1) {
@@ -148,7 +164,7 @@ export default function Billing() {
           return [
             ...prev,
             {
-              name: selectedItem.name,
+              name: selectedItem.item_name,
               quantity: Number(quantity),
               rate: rateVal,
               amount: amt,
@@ -175,8 +191,16 @@ export default function Billing() {
   };
 
   useEffect(() => {
-    if (!data && status === 'idle') fetchUser();
-  }, [data, fetchUser, status]);
+    if (!data && status === 'idle') fetchData();
+  }, [data, fetchData, status]);
+
+  useEffect(() => {
+    if (!gstdata && gststatus === 'idle') fetchGstData();
+  }, [gstdata, fetchGstData, gststatus]);
+
+  useEffect(() => {
+    if (!itemdata && itemstatus === 'idle') fetchItemData();
+  }, [itemdata, fetchItemData, itemstatus]);
 
   useEffect(() => {
     // Ensure input is focused when component mounts
@@ -211,31 +235,71 @@ export default function Billing() {
     }, 300); // Delay to detect end of barcode input
   };
 
+  useEffect(() => {
+    setCgstOptions(gstdata?.filter(item => item.gstType === 'CGST'));
+    setSgstOptions(gstdata?.filter(item => item.gstType === 'SGST'));
+  }, [gstdata]);
+
+  const handleCGSTChange = (e, value) => {
+    setSelectedCGST(value);
+    setCgst(value?.rate || '');
+
+    if (value) {
+      const match = sgstOptions.find(item => item.rate === value.rate);
+      setSelectedSGST(match || null);
+      setSgst(match?.rate || '');
+    } else {
+      setSelectedSGST(null);
+      setSgst('');
+    }
+  };
+
+  const handleSGSTChange = (e, value) => {
+    setSelectedSGST(value);
+    setSgst(value?.rate || '');
+
+    if (value) {
+      const match = cgstOptions.find(item => item.rate === value.rate);
+      setSelectedCGST(match || null);
+      setCgst(match?.rate || '');
+    } else {
+      setSelectedCGST(null);
+      setCgst('');
+    }
+  };
+
   return (
     <MainCard title='Billing Panel'>
-      <Grid container spacing={3}>
+      <Grid container spacing={3} >
         <Grid item size={{ xs: 12, md: 12 }}>
           {/* MEMBER DETAILS */}
           <Paper elevation={3} sx={{ p: 2, mb: 3 }}>
-            <Grid container spacing={3}>
-              <Grid item size={{ xs: 12, md: 4 }}>
+            <Grid container spacing={3} display='flex' justifyContent='center' alignItems='center'>
+              <Grid item size={{ xs: 12, md: 4.5 }}>
                 <Autocomplete
-                  options={data || members}
+                  options={data || []}
                   getOptionLabel={(opt) =>
                     opt?.member_code && opt?.member_name
-                      ? `${opt.member_code} - ${opt.member_name}`
+                      ? `(${opt.member_code}) - (${opt.member_name})`
                       : ''
                   }
-                  value={memberCode} // ✅ should be full object
-                  onChange={(e, value) => setMemberCode(value)} // ✅ value is whole object
+                  isOptionEqualToValue={(option, value) => option.member_id === value.member_id}
+                  value={memberCode} // memberCode should be the full object
+                  onChange={(e, value) => setMemberCode(value)}
                   size="small"
                   filterOptions={(options, { inputValue }) =>
                     options.filter((option) =>
-                      option.member_code.toLowerCase().includes(inputValue.toLowerCase())
+                      option.member_code?.toLowerCase().includes(inputValue.toLowerCase()) ||
+                      option.member_name?.toLowerCase().includes(inputValue.toLowerCase())
                     )
                   }
+                  renderOption={(props, option) => (
+                    <li {...props} key={option.member_id}>
+                      ({option.member_code}) - ({option.member_name})
+                    </li>
+                  )}
                   renderInput={(params) => (
-                    <TextField {...params} label="Member Code" />
+                    <TextField {...params} label="( Member Code ) - ( Member Name )" />
                   )}
                   sx={{
                     '& .MuiInputBase-input': {
@@ -247,12 +311,13 @@ export default function Billing() {
                     }
                   }}
                 />
+
               </Grid>
-              <Grid item size={{ xs: 12, md: 4 }}>
+              <Grid item size={{ xs: 12, md: 4.5 }}>
                 <TextField
                   label="Billing Date"
                   size="small"
-                  value={today}
+                  value={formattedDate}
                   disabled
                   fullWidth
                   slotProps={{ inputLabel: { shrink: true } }}
@@ -267,7 +332,7 @@ export default function Billing() {
                   }}
                 />
               </Grid>
-              <Grid item size={{ xs: 12, md: 4 }}>
+              {/* <Grid item size={{ xs: 12, md: 4 }}>
                 <TextField
                   label="Scan barcode here"
                   inputRef={inputRef}
@@ -286,7 +351,7 @@ export default function Billing() {
                     }
                   }}
                 />
-              </Grid>
+              </Grid> */}
             </Grid>
           </Paper>
         </Grid>
@@ -297,14 +362,14 @@ export default function Billing() {
         <Grid item size={{ xs: 12, md: 12 }}>
           <Paper elevation={3} sx={{ p: 2 }}>
             <Grid container spacing={2}>
-              <Grid item size={{ xs: 12, md: 3 }}>
+              <Grid item size={{ xs: 12, md: 4 }}>
                 <Autocomplete
-                  options={items}
-                  getOptionLabel={(opt) => opt.name}
+                  options={itemdata || []}
+                  getOptionLabel={(opt) => opt.item_name || ''}
                   value={selectedItem}
                   onChange={(e, value) => {
-                    console.log('value', value);
-                    setSelectedItem(value)
+                    setSelectedItem(value);
+                    setQuantity('');
                   }}
                   size="small"
                   renderInput={(params) => (
@@ -320,6 +385,7 @@ export default function Billing() {
                     }
                   }}
                 />
+
               </Grid>
               <Grid item size={{ xs: 12, md: 1.5 }}>
                 <TextField
@@ -360,7 +426,7 @@ export default function Billing() {
                   }}
                 />
               </Grid>
-              <Grid item size={{ xs: 12, md: 2 }}>
+              <Grid item size={{ xs: 12, md: 1.5 }}>
                 <TextField
                   label="Amount"
                   size="small"
@@ -400,9 +466,9 @@ export default function Billing() {
                 />
               </Grid>
 
-              <Grid item size={{ xs: 12, md: 2 }}>
+              <Grid item size={{ xs: 12, md: 1.5 }}>
                 <TextField
-                  label="Total Amount"
+                  label="Total Amt"
                   size="small"
                   fullWidth
                   value={totalAmount}
@@ -476,7 +542,7 @@ export default function Billing() {
                         }
                       }}
                     >
-                      <TableCell align='center'>Action</TableCell>
+                      <TableCell align="center" sx={{ width: '40px', padding: '4px' }}>#</TableCell>
                       <TableCell align='center'>Item</TableCell>
                       <TableCell align='center'>Qty</TableCell>
                       <TableCell align='center'>Rate</TableCell>
@@ -487,7 +553,7 @@ export default function Billing() {
                   <TableBody>
                     {billingList.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell align='center'>
+                        <TableCell align="center" sx={{ width: '40px', padding: '4px' }}>
                           <Button
                             size="small"
                             color="error"
@@ -498,9 +564,91 @@ export default function Billing() {
                           </Button>
                         </TableCell>
                         <TableCell align='center'>{item.name}</TableCell>
-                        <TableCell align='center'>{item.quantity}</TableCell>
+                        <TableCell align='center'>
+                          <TextField
+                            placeholder='Qty'
+                            size="small"
+                            fullWidth
+                            value={item.quantity}
+                            sx={{
+                              '& .MuiInputBase-input': {
+                                padding: '8px',
+                                fontSize: '0.75rem'
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontSize: '0.75rem',
+                              },
+                              maxWidth: 40
+                            }}
+                            variant='standard'
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || isNumeric(val)) {
+                                setBillingList(prev =>
+                                  prev.map((item, i) => {
+                                    if (i === index) {
+                                      const quantity = Number(val || 0);
+                                      const amount = quantity * item.rate;
+                                      const discount = item.discount || 0;
+                                      const total = amount - discount;
+
+                                      return {
+                                        ...item,
+                                        quantity,
+                                        amount,
+                                        total,
+                                      };
+                                    }
+                                    return item;
+                                  })
+                                );
+                              }
+                            }}
+
+                          />
+                        </TableCell>
                         <TableCell align='center'>{item.rate}</TableCell>
-                        <TableCell align='center'>{item.discount}</TableCell>
+                        <TableCell align='center'>
+                          <TextField
+                            placeholder='Disc'
+                            size="small"
+                            fullWidth
+                            value={item.discount}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || isNumeric(val)) {
+                                setBillingList(prev =>
+                                  prev.map((item, i) => {
+                                    if (i === index) {
+                                      const discount = Number(val || 0);
+                                      const amount = item.rate * item.quantity;
+                                      const total = amount - discount;
+
+                                      return {
+                                        ...item,
+                                        discount,
+                                        amount,
+                                        total,
+                                      };
+                                    }
+                                    return item;
+                                  })
+                                );
+                              }
+                            }}
+                            sx={{
+                              '& .MuiInputBase-input': {
+                                padding: '8px',
+                                fontSize: '0.75rem'
+                              },
+                              '& .MuiInputLabel-root': {
+                                fontSize: '0.75rem',
+                              },
+                              maxWidth: 50
+                            }}
+                            variant='standard'
+                          />
+                        </TableCell>
                         <TableCell align='right'><strong>{item.total}</strong></TableCell>
                       </TableRow>
                     ))}
@@ -509,72 +657,83 @@ export default function Billing() {
               </TableContainer>
             )}
             <Grid container spacing={2} mt={2} flexDirection='row-reverse'>
-              <Grid item size={{ xs: 12, md: 3 }}>
+              <Grid item size={{ xs: 12, md: 4 }}>
                 <Grid container spacing={1}>
                   <Grid item size={{ xs: 12, md: 12 }} display='flex' justifyContent='space-between' alignItems='center'>
-                    {/* <TextField
-                      label="Taxable Amount"
-                      size="small"
-                      fullWidth
-                      value={taxableAmount}
-                      disabled
-                    /> */}
                     <Typography variant="h6" color="black">Taxable Amt:</Typography>
                     <Typography variant="h6" color="black">{taxableAmount}</Typography>
                   </Grid>
-                  <Grid item size={{ xs: 12, md: 12 }} display='flex' justifyContent='space-between' alignItems='center' gap={2}>
-                    <Typography variant="h6" color="black">CGST%:</Typography>
-                    <TextField
-                      placeholder='CGST (%)'
-                      size="small"
-                      fullWidth
-                      variant='standard'
-                      value={cgst}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || isNumeric(val)) {
-                          setCgst(val);
-                          setLastEdited('cgst');
-                        }
-                      }}
-                      sx={{ maxWidth: 60 }}
-                    />
-                    <Typography variant="h6" color="black">{cgst && (gstAmount / 2).toFixed(2)}</Typography>
+                  <Grid item size={{ xs: 12, md: 12 }} >
+                    <Grid container spacing={1} display='flex' justifyContent='space-between' alignItems='center'>
+                      <Grid size={{ xs: 12, md: 3 }}>
+                        <Typography variant="h6" color="black">CGST%:</Typography>
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 7 }}>
+                        <Autocomplete
+                          options={cgstOptions || []}
+                          getOptionLabel={(opt) => opt?.gstDescription || ''}
+                          value={selectedCGST}
+                          onChange={handleCGSTChange}
+                          renderInput={(params) => <TextField {...params} variant='standard' placeholder="Select CGST" />}
+                          filterOptions={(options, state) =>
+                            options.filter((option) =>
+                              option.gstDescription
+                                ?.toLowerCase()
+                                .includes(state.inputValue.toLowerCase())
+                            )
+                          }
+                          size="small"
+                          sx={{
+                            '& .MuiInputBase-input': {
+                              padding: '8px',
+                              fontSize: '0.75rem'
+                            },
+                            '& .MuiInputLabel-root': {
+                              fontSize: '0.75rem',
+                            },
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 2 }}>
+                        <Typography variant="h6" color="black">{(gstAmount / 2).toFixed(2)}</Typography>
+                      </Grid>
+                    </Grid>
                   </Grid>
-                  <Grid item size={{ xs: 12, md: 12 }} display='flex' justifyContent='space-between' alignItems='center' gap={2}>
-                    <Typography variant="h6" color="black">SGST%:</Typography>
-                    <TextField
-                      placeholder="SGST (%)"
-                      variant='standard'
-                      size="small"
-                      fullWidth
-                      value={sgst}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || isNumeric(val)) {
-                          setSgst(val);
-                          setLastEdited('sgst');
-                        }
-                      }}
-                      sx={{ maxWidth: 60 }}
-                    />
-                    <Typography variant="h6" color="black">{sgst && (gstAmount / 2).toFixed(2)}</Typography>
-                  </Grid>
-                  <Grid item size={{ xs: 12, md: 12 }} display='flex' justifyContent='space-between' alignItems='center' gap={2}>
-                    <Typography variant="h6" color="black">IGST%:</Typography>
-                    <TextField
-                      placeholder="IGST (%)"
-                      variant='standard'
-                      size="small"
-                      fullWidth
-                      value={igst}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === '' || isNumeric(val)) setIgst(val);
-                      }}
-                      sx={{ maxWidth: 60 }}
-                    />
-                    <Typography variant="h6" color="black">{igst && gstAmount}</Typography>
+                  <Grid item size={{ xs: 12, md: 12 }}>
+                    <Grid container spacing={1} display='flex' justifyContent='space-between' alignItems='center' gap={1}>
+                      <Grid size={{ xs: 12, md: 3 }}>
+                        <Typography variant="h6" color="black">SGST%:</Typography>
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 7 }}>
+                        <Autocomplete
+                          options={sgstOptions || []}
+                          getOptionLabel={(opt) => opt?.gstDescription || ''}
+                          value={selectedSGST}
+                          onChange={handleSGSTChange}
+                          renderInput={(params) => <TextField {...params} placeholder="Select SGST" variant='standard' />}
+                          filterOptions={(options, state) =>
+                            options.filter((option) =>
+                              option.gstDescription
+                                ?.toLowerCase()
+                                .includes(state.inputValue.toLowerCase())
+                            )
+                          }
+                          size="small"
+                          sx={{
+                            '& .MuiInputBase-input': {
+                              padding: '8px',
+                              fontSize: '0.75rem'
+                            },
+                            '& .MuiInputLabel-root': {
+                              fontSize: '0.75rem',
+                            },
+                          }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, md: 2 }}>
+                        <Typography variant="h6" color="black">{(gstAmount / 2).toFixed(2)}</Typography>
+                      </Grid>
+                    </Grid>
                   </Grid>
                   <Grid item size={{ xs: 12, md: 12 }} display='flex' justifyContent='space-between' alignItems='center'>
                     <Typography variant="h6" color="black">Total GST Amt:</Typography>
@@ -584,37 +743,40 @@ export default function Billing() {
                     <Typography variant="h6" color="black">Net Amt:</Typography>
                     <Typography variant="h6" color="black">{finalTotal}</Typography>
                   </Grid>
-                  <Grid item size={{ xs: 12, md: 6 }}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      size='small'
-                      sx={{ background: '#bc0505', color: 'white' }}
-                      onClick={() => {
-                        setMemberCode(null);
-                        setBillingList([]);
-                        setTaxableAmount('');
-                        setCgst('');
-                        setSgst('');
-                        setIgst('');
-                        setGstAmount('');
-                        setFinalTotal('');
-                        setSelectedItem(null);
-                        setQuantity('');
-                      }}
-                    >
-                      Clear All
-                    </Button>
-                  </Grid>
-                  <Grid item size={{ xs: 12, md: 6 }}>
-                    <Button
-                      variant="contained"
-                      fullWidth
-                      sx={{ background: 'green', color: 'white' }}
-                      size='small'
-                    >
-                      Save
-                    </Button>
+                  <Grid item size={{ xs: 12, md: 12 }}>
+                    <Grid container display='flex' justifyContent='space-between' alignItems='center'>
+                      <Grid item size={{ xs: 4, md: 4 }}>
+                        <Button
+                          variant="contained"
+                          fullWidth
+                          size='small'
+                          sx={{ background: '#bc0505', color: 'white' }}
+                          onClick={() => {
+                            setMemberCode(null);
+                            setBillingList([]);
+                            setTaxableAmount('');
+                            setCgst('');
+                            setSgst('');
+                            setGstAmount('');
+                            setFinalTotal('');
+                            setSelectedItem(null);
+                            setQuantity('');
+                          }}
+                        >
+                          Clear All
+                        </Button>
+                      </Grid>
+                      <Grid item size={{ xs: 4, md: 4 }}>
+                        <Button
+                          variant="contained"
+                          fullWidth
+                          sx={{ background: 'green', color: 'white' }}
+                          size='small'
+                        >
+                          Save
+                        </Button>
+                      </Grid>
+                    </Grid>
                   </Grid>
                 </Grid>
               </Grid>

@@ -1,29 +1,41 @@
+// apiService.js
 import API from './api';
 
+let onUnauthorized = null;
+
+export const setUnauthorizedHandler = (callback) => {
+  onUnauthorized = callback;
+};
+
 const apiService = {
-  // GET request
   get: async (url, params = {}) => {
     try {
       const response = await API.get(url, { params });
       return response.data;
     } catch (error) {
-      console.error('GET error:', error);
+      if (error?.response?.status === 401) {
+        localStorage.removeItem('dks_liquor_token');
+        if (onUnauthorized) onUnauthorized(); // Call the handler
+      }
+      console.log('GET error:', error?.response?.status);
       throw error;
     }
   },
 
-  // POST request with JSON body
   post: async (url, data) => {
     try {
       const response = await API.post(url, data);
       return response.data;
     } catch (error) {
+      if (error?.response?.status === 401) {
+        localStorage.removeItem('dks_liquor_token');
+        if (onUnauthorized) onUnauthorized();
+      }
       console.error('POST error:', error);
       throw error;
     }
   },
 
-  // POST request with media (multipart/form-data)
   postWithMedia: async (url, formData) => {
     try {
       const response = await API.post(url, formData, {
@@ -33,6 +45,10 @@ const apiService = {
       });
       return response.data;
     } catch (error) {
+      if (error?.response?.status === 401) {
+        localStorage.removeItem('dks_liquor_token');
+        if (onUnauthorized) onUnauthorized();
+      }
       console.error('POST with media error:', error);
       throw error;
     }

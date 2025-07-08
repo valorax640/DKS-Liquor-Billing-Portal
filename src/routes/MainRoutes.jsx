@@ -17,7 +17,7 @@ const MainRoutes = {
       children: [
         { path: '', element: <DashboardDefault /> },
         { path: 'dashboard/default', element: <DashboardDefault /> },
-        { path: 'sample-page', element: <SamplePage /> },
+        { path: 'billing', element: <SamplePage /> },
         {
           path: 'components',
           children: [

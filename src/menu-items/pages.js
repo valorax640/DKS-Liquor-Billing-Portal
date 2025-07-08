@@ -32,7 +32,7 @@ const pages = {
       id: 'sample-page',
       title: 'Billing',
       type: 'item',
-      url: '/sample-page',
+      url: '/billing',
       icon: icons.ChromeReaderModeOutlinedIcon
     },
     // {

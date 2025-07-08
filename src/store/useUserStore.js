@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import axios from 'axios';
 import apiService from 'services/apiService'
 import { SUCCESS_STATUS, ERROR_STATUS, LOADING_STATUS } from 'utils/constant';
 
@@ -22,7 +21,7 @@ const useUserStore = create((set) => ({
         } catch (err) {
             set({
                 status: ERROR_STATUS,
-                error: err.message
+                error: err.response.status
             });
         }
     }
